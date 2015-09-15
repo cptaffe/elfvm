@@ -4,6 +4,7 @@
 #include <unistd.h> // read
 #include <fcntl.h> // open
 #include <string.h>
+#include <stdbool.h>
 
 // Magic marker for elf files.
 uint8_t headerIdentMagic[4] = { 0x7f, 'E', 'L', 'F' };
@@ -207,6 +208,10 @@ char *toStringElfHeader(ElfHeader *hdr) {
 	return str;
 }
 
+bool elfHeader(ElfHeader *hdr) {
+	return memcmp(headerIdentMagic, hdr, sizeof(headerIdentMagic)) == 0;
+}
+
 int main(int argc, char *argv[]) {
 	char *f;
 	if (argc != 2) {
@@ -219,7 +224,7 @@ int main(int argc, char *argv[]) {
 	ElfHeader *hdr = calloc(sizeof(ElfHeader), 1);
 	int fd = open(f, O_RDONLY, S_IREAD);
 	int len = read(fd, hdr, sizeof(ElfHeader));
-	if (memcmp(headerIdentMagic, hdr, sizeof(headerIdentMagic)) == 0) {
+	if (elfHeader(hdr)) {
 		char *str = toStringElfHeader(hdr);
 		printf("%s", str);
 		free(str);
