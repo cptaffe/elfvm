@@ -11,20 +11,52 @@ public:
 };
 
 namespace elf {
+
+	// Memory structure as stored
+	struct HeaderMem {
+		HeaderMem(int fd) {
+			read(fd, static_cast<void *>(this), sizeof(HeaderMem));
+		}
+		struct Ident {
+			uint32_t mag;
+			uint8_t cls;
+			uint8_t data;
+			uint8_t version;
+			uint8_t osabi;
+			uint8_t abiversion;
+			uint8_t pad[7];
+		} ident;
+		uint16_t type;
+		uint16_t machine;
+		uint32_t version;
+		uint64_t entry;
+		uint64_t phoff;
+		uint64_t shoff;
+		uint32_t flags;
+		uint16_t ehsize;
+		uint16_t phentsize;
+		uint16_t phnum;
+		uint16_t shentsize;
+		uint16_t shnum;
+		uint16_t shstrndx;
+	};
+
+	struct SectionHeaderMem {
+		uint32_t name;
+		uint32_t type;
+		uint64_t flags;
+		uint64_t addr;
+		uint64_t off;
+		uint64_t size;
+		uint32_t link;
+		uint32_t info;
+		uint64_t addr_align;
+		uint64_t entry_size;
+	};
+
 	class Header : public Stringable {
 	public:
-		Header(int fd) : ident(fd), type(fd), version(fd) {
-			read(fd, static_cast<void *>(&entry), sizeof(entry));
-			read(fd, static_cast<void *>(&programHeaderOffset), sizeof(programHeaderOffset));
-			read(fd, static_cast<void *>(&sectionHeaderOffset), sizeof(sectionHeaderOffset));
-			read(fd, static_cast<void *>(&flags), sizeof(flags));
-			read(fd, static_cast<void *>(&size), sizeof(size));
-			read(fd, static_cast<void *>(&programHeaderEntrySize), sizeof(programHeaderEntrySize));
-			read(fd, static_cast<void *>(&programHeaderEntryNum), sizeof(programHeaderEntryNum));
-			read(fd, static_cast<void *>(&sectionHeaderEntrySize), sizeof(sectionHeaderEntrySize));
-			read(fd, static_cast<void *>(&sectionHeaderEntryNum), sizeof(sectionHeaderEntryNum));
-			read(fd, static_cast<void *>(&sectionNameStringTableIndex), sizeof(sectionNameStringTableIndex));
-		}
+		Header(HeaderMem m) : mem(m), ident(m.ident), type(m.type), version(m.version) {}
 
 		bool confirm() {
 			return ident.confirm();
@@ -54,32 +86,32 @@ namespace elf {
 				"  sectionHeaderEntrySize:      '%#x',\n"
 				"  sectionHeaderEntryNum:       '%#x',\n"
 				"  sectionNameStringTableIndex: '%#x'\n"
-				"}\n",
+				"}",
 				ident.toString().c_str(),
 				type.toString().c_str(),
-				machine,
+				mem.machine,
 				version.toString().c_str(),
-				entry,
-				programHeaderOffset,
-				sectionHeaderOffset,
-				flags,
-				size,
-				programHeaderEntrySize,
-				programHeaderEntryNum,
-				sectionHeaderEntrySize,
-				sectionHeaderEntryNum,
-				sectionNameStringTableIndex
+				mem.entry,
+				mem.phoff,
+				mem.shoff,
+				mem.flags,
+				mem.ehsize,
+				mem.phentsize,
+				mem.phnum,
+				mem.shentsize,
+				mem.shnum,
+				mem.shstrndx
 			);
 			std::string st(str);
 			free(str);
 			return st;
 		}
 	private:
+		HeaderMem mem;
+
 		class Ident : public Stringable {
 		public:
-			Ident(int fd) : mag(fd), cls(fd), data(fd), version(fd), abi(fd), abi_version(fd) {
-				read(fd, static_cast<void *>(&padding), sizeof(padding));
-			}
+			Ident(HeaderMem::Ident i) : mag(i.mag), cls(i.cls), data(i.data), version(i.version), abi(i.osabi), abi_version(i.abiversion) {}
 
 			bool confirm() {
 				return mag.confirm();
@@ -108,9 +140,7 @@ namespace elf {
 		private:
 			class Magic : public Stringable {
 			public:
-				Magic(int fd) {
-					read(fd, static_cast<void *>(&mag), sizeof(mag));
-				}
+				Magic(uint32_t mg) : mag(mg) {}
 				bool confirm() {
 					return mag == kMagic;
 				}
@@ -131,9 +161,7 @@ namespace elf {
 
 			class Class : public Stringable {
 			public:
-				Class(int fd) {
-					read(fd, static_cast<void *>(&cls), sizeof(cls));
-				}
+				Class(uint8_t c) : cls(c) {}
 
 				virtual std::string toString() {
 					std::string classes[] = {
@@ -156,9 +184,7 @@ namespace elf {
 
 			class Data : public Stringable {
 			public:
-				Data(int fd) {
-					read(fd, static_cast<void *>(&data), sizeof(data));
-				}
+				Data(uint8_t d) : data(d) {}
 
 				virtual std::string toString() {
 					std::string datas[] = {
@@ -181,9 +207,7 @@ namespace elf {
 
 			class Version : public Stringable {
 			public:
-				Version(int fd) {
-					read(fd, static_cast<void *>(&version), sizeof(version));
-				}
+				Version(uint8_t v) : version(v) {}
 
 				virtual std::string toString() {
 					std::string versions[] = {
@@ -204,9 +228,7 @@ namespace elf {
 
 			class OSABI : public Stringable {
 			public:
-				OSABI(int fd) {
-					read(fd, static_cast<void *>(&abi), sizeof(abi));
-				}
+				OSABI(uint8_t a) : abi(a) {}
 
 				virtual std::string toString() {
 					std::string abis[] = {
@@ -234,9 +256,7 @@ namespace elf {
 
 			class ABIVersion : public Stringable {
 			public:
-				ABIVersion(int fd) {
-					read(fd, static_cast<void *>(&version), sizeof(version));
-				}
+				ABIVersion(uint8_t v) : version(v) {}
 
 				virtual std::string toString() {
 					char *str;
@@ -247,16 +267,11 @@ namespace elf {
 			private:
 				uint8_t version;
 			} abi_version;
-
-			// padding bytes
-			uint8_t padding[7];
 		} ident;
 
 		class Type : public Stringable {
 		public:
-			Type(int fd) {
-				read(fd, static_cast<void *>(&type), sizeof(type));
-			}
+			Type(uint16_t t) : type(t) {}
 
 			virtual std::string toString() {
 				std::string types[] = {
@@ -294,13 +309,9 @@ namespace elf {
 			uint16_t type;
 		} type;
 
-		uint16_t machine;
-
 		class Version : public Stringable {
 		public:
-			Version(int fd) {
-				read(fd, static_cast<void *>(&version), sizeof(version));
-			}
+			Version(uint32_t v) : version(v) {}
 
 			virtual std::string toString() {
 				std::string versions[] = {
@@ -318,12 +329,6 @@ namespace elf {
 			};
 			uint32_t version;
 		} version;
-
-		uint64_t entry, programHeaderOffset, sectionHeaderOffset;
-		uint32_t flags;
-		uint16_t size, programHeaderEntrySize, programHeaderEntryNum,
-			sectionHeaderEntrySize, sectionHeaderEntryNum,
-			sectionNameStringTableIndex;
 	};
 }
 
@@ -337,6 +342,6 @@ int main(int argc, char *argv[]) {
 	}
 
 	int fd = open(f, O_RDONLY, S_IREAD);
-	elf::Header hdr(fd);
+	elf::Header hdr(fd); // read header from fd.
 	printf("%s: %s\n", hdr.toString().c_str(), (hdr.confirm()) ? "elf" : "not elf");
 }
